@@ -1,0 +1,78 @@
+<!doctype html>
+<html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>FT0 episode viewer</title>
+<style>
+:root{--bg:#f9f9f7;--card:#fcfcfb;--ink:#0b0b0b;--ink2:#52514e;--mut:#898781;--grid:#e1e0d9;--mz:#2a78d6;--ppo:#eb6834;--rule:#898781;--comp:#d6453d;--mem:#1baf7a;--bgj:#d9d8d2;--flow:#6250d6;--en:#eda100}
+@media(prefers-color-scheme:dark){:root{--bg:#0d0d0d;--card:#1a1a19;--ink:#f0efec;--ink2:#c3c2b7;--grid:#2c2c2a;--mz:#3987e5;--ppo:#d95926;--comp:#c9433b;--mem:#199e70;--bgj:#4a4a46}}
+*{box-sizing:border-box}body{margin:0;background:var(--bg);color:var(--ink);font:13px/1.45 system-ui,-apple-system,Segoe UI,sans-serif}
+main{max-width:1180px;margin:0 auto;padding:16px}h1{font-size:17px;margin:0 0 2px}.sub{color:var(--ink2);margin-bottom:12px}
+.bar{display:flex;flex-wrap:wrap;gap:8px 14px;align-items:center;background:var(--card);border:1px solid var(--grid);border-radius:10px;padding:10px 12px;margin-bottom:12px}
+select,button{font:inherit;color:var(--ink);background:var(--card);border:1px solid var(--grid);border-radius:6px;padding:4px 9px;cursor:pointer}button:hover{border-color:var(--mut)}
+input[type=range]{flex:1;min-width:220px}.tag{font-size:12px;color:var(--ink2)}
+.cols{display:grid;grid-template-columns:repeat(3,1fr);gap:12px}@media(max-width:900px){.cols{grid-template-columns:1fr}}
+.card{background:var(--card);border:1px solid var(--grid);border-radius:10px;padding:12px}.card h2{font-size:14px;margin:0 0 6px;display:flex;justify-content:space-between;gap:8px}
+.sw{display:inline-block;width:10px;height:10px;border-radius:2px;margin-right:6px}.sec{margin:8px 0 2px;color:var(--ink2);font-size:12px}
+.nodes{display:flex;gap:3px}.nd{width:26px;height:26px;border-radius:4px;display:flex;align-items:center;justify-content:center;font-size:10px;font-weight:600;color:#fff}.nd.empty{border:1px dashed var(--mut);color:transparent}.nd.bg{color:var(--ink2)}.chips{display:flex;flex-wrap:wrap;gap:3px}.chip{display:inline-flex;flex-direction:column;align-items:center;min-width:40px;padding:1px 4px;border-radius:4px;color:#fff;font-weight:600;font-size:11px;line-height:1.15;border:2px solid transparent}.chip small{font-weight:400;font-size:9px;opacity:.92}.chip.sel{border-color:var(--ink)}.chip.nxt{border:2px dashed #e8b923}.nd.new{outline:2px solid #e8b923;outline-offset:1px}.pill{display:inline-block;padding:1px 7px;border-radius:10px;color:#fff;font-size:11px;font-weight:600;white-space:nowrap}.pill.adv{background:var(--ink2)}.none{color:var(--mut);font-size:12px}
+.kv{display:flex;justify-content:space-between;color:var(--ink2);margin-top:3px}.kv b{color:var(--ink);font-weight:600}
+.pw{position:relative;height:16px;border-radius:4px;background:var(--grid);margin:6px 0 2px;overflow:hidden}.pw>div{position:absolute;top:0;bottom:0}
+.dec{margin-top:12px}.dec h2{font-size:14px;margin:0 0 6px}.leg{display:flex;gap:14px;flex-wrap:wrap;color:var(--ink2);font-size:12px;margin:6px 0}
+svg text{fill:var(--ink2);font-size:10.5px}.note{color:var(--mut);font-size:12px;margin-top:8px}
+</style></head><body><main>
+<h1>FT0 episode viewer</h1><div class="sub">Same instance (seed), three players side by side. Time slider = ticks of 10 min. The decision inspector steps through one player's decisions and shows what PPO and MuZero would do in that state.</div>
+<div class="bar"><label>Seed <select id="seed"></select></label><span id="quick"></span><span class="tag" id="seedinfo"></span></div>
+<div class="bar"><button id="play">▶ Play</button><input type="range" id="t" min="0" value="0"><span class="tag" id="tl"></span></div>
+<div class="leg" style="margin:0 0 8px"><span><span class="sw" style="background:var(--comp)"></span>compute job</span><span><span class="sw" style="background:var(--mem)"></span>memory job</span><span><span class="sw" style="background:var(--bgj)"></span>background job (pre-filled cluster, not part of the cost)</span><span><span class="sw" style="border:1px dashed var(--mut)"></span>free node</span><span><span class="sw" style="border:2px solid var(--ink)"></span>oldest job of its class: the one a placement action would start</span><span><span class="sw" style="outline:2px solid #e8b923;outline-offset:1px"></span>job started at this tick</span><span><span class="sw" style="border:2px dashed #e8b923"></span>queued job that will be started at the next tick (with its section)</span><span>pills: the decisions of the tick, in order (job id · nodes → F fast / E efficient; last pill = advance time and the power level chosen)</span><span>numbers: job id inside the nodes; in the queue, id and (size in nodes · nominal duration in minutes)</span></div>
+<div class="cols" id="cols"></div>
+<div class="card dec"><h2>Decision inspector</h2>
+<div class="bar" style="border:0;padding:0;margin-bottom:6px"><label>Follow <select id="drv"></select></label><button id="pv">◀</button><button id="nx">▶</button><span class="tag" id="di"></span></div>
+<svg id="bars" width="100%" viewBox="0 0 900 190"></svg>
+<div class="leg"><span><span class="sw" style="background:var(--ppo)"></span>PPO policy probability (%)</span><span><span class="sw" style="background:var(--mz)"></span>MuZero MCTS visit share (%)</span><span>labels: C/M = compute/memory job, number = size (nodes), F/E = fast/efficient section; adv = advance time at level L</span></div>
+<div class="note">Bars are drawn for the state reached by the followed player; actions that are not legal in that state are greyed. The outlined bar is the action the followed player actually took.</div></div>
+</main>
+<script>
+const DATA=__DATA__;const NAMES={rule:"Rule (no waiting)",ppo:"PPO",mz:"MuZero"};const PL=DATA.players;
+const $=id=>document.getElementById(id);const css=n=>getComputedStyle(document.documentElement).getPropertyValue(n).trim();
+let seed=DATA.sel.typical||DATA.seeds[0],t=0,timer=null,drv=PL.includes("ppo")?"ppo":PL[0],di=0;
+const SIZES=[1,2,4];function alabel(a){if(a<2)return"adv "+(a?"0.7":"1.0");const c=(a-2)>>1,s=(a-2)&1;return(c&1?"M":"C")+SIZES[c>>1]+(s?"E":"F")}
+function aname(a){if(a<2)return"advance time, level L = "+(a?"0.7":"1.0");const c=(a-2)>>1,s=(a-2)&1;return"start oldest "+(c&1?"memory":"compute")+" job of size "+SIZES[c>>1]+" on the "+(s?"efficient":"fast")+" section"}
+const NA=2,EV={};
+function evs(p){const key=seed+'_'+p;if(EV[key])return EV[key];const T=DATA.tr[seed][p],E={},used=new Set();
+ T.dec.forEach(r=>{const t0=r[0],a=r[1];E[t0]=E[t0]||{pl:[],adv:null};if(a>=NA){const c=(a-NA)>>1,s=(a-NA)&1;const j=T.jobs.filter(j=>j[2]===t0&&j[1]===s&&2*SIZES.indexOf(j[5])+j[0]===c&&!used.has(j[7])).sort((x,y)=>x[7]-y[7])[0];if(j){used.add(j[7]);E[t0].pl.push(j)}}else E[t0].adv=a});
+ return EV[key]=E}
+function advtxt(a,tk){return "⏱ L = "+(a?"0.7":"1.0")}
+function pills(p,tt){const T=DATA.tr[seed][p],e=evs(p)[tt];if(!e)return '<span class="none">no decision (episode over)</span>';
+ let h=e.pl.map(j=>'<span class="pill" style="background:var(--'+(j[0]?'mem':'comp')+')" title="start job '+j[7]+' ('+j[5]+' node(s), '+(j[0]?'memory':'compute')+') on the '+(j[1]?'efficient':'fast')+' section">#'+j[7]+' · '+j[5]+'n → '+(j[1]?'E':'F')+'</span>').join(' ');
+ if(e.adv!==null){const tk=T.ticks.find(x=>x[0]===tt);h+=' <span class="pill adv">'+advtxt(e.adv,tk)+'</span>'}return h||'<span class="none">–</span>'}
+function maxT(){return Math.max(...PL.map(p=>DATA.tr[seed][p].ticks.slice(-1)[0][0]+1))}
+function init(){const s=$("seed");DATA.seeds.forEach(x=>{const o=document.createElement("option");o.value=x;const T=DATA.tr[x];o.textContent=x+"  ·  "+PL.map(p=>NAMES[p].split(" ")[0]+" "+T[p].tot.toFixed(2)).join("  ·  ");s.appendChild(o)});s.value=seed;
+ s.onchange=()=>{seed=+s.value;reset()};const q=$("quick");Object.entries(DATA.sel).forEach(([k,v])=>{const b=document.createElement("button");b.textContent=({typical:"typical",mz_best:"MuZero best",mz_worst:"MuZero worst"})[k]+" ("+v+")";b.onclick=()=>{seed=v;s.value=v;reset()};q.appendChild(b)});
+ $("t").oninput=e=>{t=+e.target.value;syncDec();draw()};$("play").onclick=()=>{if(timer){clearInterval(timer);timer=null;$("play").textContent="▶ Play"}else{$("play").textContent="❚❚ Pause";timer=setInterval(()=>{if(t>=maxT()){clearInterval(timer);timer=null;$("play").textContent="▶ Play";return}t++;syncDec();draw()},450)}};
+ const dsel=$("drv");PL.forEach(p=>{const o=document.createElement("option");o.value=p;o.textContent=NAMES[p];dsel.appendChild(o)});dsel.value=drv;dsel.onchange=()=>{drv=dsel.value;syncDec();draw()};
+ $("pv").onclick=()=>{di=Math.max(0,di-1);t=DATA.tr[seed][drv].dec[di][0];draw()};$("nx").onclick=()=>{di=Math.min(DATA.tr[seed][drv].dec.length-1,di+1);t=DATA.tr[seed][drv].dec[di][0];draw()};
+ const cols=$("cols");PL.forEach(p=>{const c=document.createElement("div");c.className="card";c.id="c_"+p;cols.appendChild(c)});reset()}
+function reset(){t=0;di=0;$("t").max=maxT();$("t").value=0;draw()}
+function syncDec(){const dec=DATA.tr[seed][drv].dec;let i=dec.findIndex(r=>r[0]>=t);di=i<0?dec.length-1:i}
+function card(p){const T=DATA.tr[seed][p],dt=T.dt/3600;const cells=[[],[]];[6,10].forEach((n,i)=>{for(let k=0;k<n;k++)cells[i].push(null)});
+ T.bg.forEach(j=>{if(t<j[2])j[4].forEach(k=>cells[j[1]][k]={bg:1})});T.jobs.forEach(j=>{if(j[2]>=0&&t>=j[2]&&t<j[3])j[6].forEach(k=>cells[j[1]][k]={typ:j[0],id:j[7],nw:j[2]===t})});
+ const col=v=>!v?"transparent":v.bg?"var(--bgj)":v.typ===0?"var(--comp)":"var(--mem)";const grid=i=>'<div class="nodes">'+cells[i].map(v=>'<div class="nd'+(!v?' empty':v.bg?' bg':v.nw?' new':'')+'" style="background:'+col(v)+'"'+(v&&!v.bg?' title="job '+v.id+'"':'')+'>'+(!v?'':v.bg?'bg':v.id)+'</div>').join("")+"</div>";
+ const q=T.jobs.filter(j=>j[4]<=t&&t<j[2]).sort((a,b)=>a[7]-b[7]);const head={};q.forEach(j=>{const c=2*SIZES.indexOf(j[5])+j[0];if(!(c in head))head[c]=j[7]});
+ const chips=q.map(j=>{const c=2*SIZES.indexOf(j[5])+j[0],sel=head[c]===j[7],nx=j[2]===t+1;return '<span class="chip'+(sel?' sel':'')+(nx?' nxt':'')+'" style="background:var(--'+(j[0]?'mem':'comp')+')" title="job '+j[7]+': '+j[5]+' node(s), '+(j[0]?'memory':'compute')+', nominal duration '+Math.round(j[8]/60)+' min'+(sel?' (oldest of its class)':'')+'">'+j[7]+'<small>'+j[5]+'n · '+Math.round(j[8]/60)+'m'+(nx?' → '+(j[1]?'E':'F'):'')+"</small></span>"}).join("")||'<span class="tag">empty</span>';
+ const qc=q.filter(j=>j[0]===0).length,qm=q.length-qc,run=T.jobs.filter(j=>j[2]>=0&&t>=j[2]&&t<j[3]).length;
+ const tk=T.ticks.find(x=>x[0]===t),done=t>T.ticks.slice(-1)[0][0];let fl=0,en=0;T.ticks.forEach(x=>{if(x[0]<t){fl+=x[7];en+=x[8]}});
+ const last=T.ticks.find(x=>x[0]===t-1);let power="";if(tk){const P=12000;power='<div class="pw"><div style="left:0;width:'+tk[4]/P*100+'%;background:var(--'+p+')"></div><div style="left:'+tk[4]/P*100+'%;width:'+(tk[3]-tk[4])/P*100+'%;background:var(--'+p+');opacity:.35"></div><div style="left:'+Math.min(tk[2],P)/P*100+'%;width:2px;background:var(--ink)"></div></div><div class="kv"><span>used / delivered / requested (kW)</span><b>'+(tk[4]/1000).toFixed(1)+' / '+(tk[3]/1000).toFixed(1)+' / '+(tk[2]/1000).toFixed(1)+'</b></div>'}
+ const lvl=tk?tk[1].toFixed(1):(done?"–":"…");
+ return '<h2><span><span class="sw" style="background:var(--'+p+')"></span>'+NAMES[p]+'</span><span>cost '+T.tot.toFixed(3)+' h</span></h2>'+
+ '<div class="sec">Fast section (6 nodes)</div>'+grid(0)+'<div class="sec">Efficient section (10 nodes)</div>'+grid(1)+
+ '<div class="sec" style="margin-top:10px">Decisions at this tick (tick '+t+')</div><div class="chips">'+pills(p,t)+'</div><div class="sec" style="margin-top:6px;opacity:.7">Next tick (tick '+(t+1)+')</div><div class="chips" style="opacity:.55">'+pills(p,t+1)+'</div>'+
+ '<div class="sec" style="margin-top:10px">Queue: '+q.length+' jobs ('+qc+' compute · '+qm+' memory)</div><div class="chips">'+chips+'</div><div class="kv" style="margin-top:8px"><span>running (episode jobs)</span><b>'+run+'</b></div><div class="kv"><span>level L this tick</span><b>'+lvl+'</b></div>'+power+
+ '<div class="kv"><span>cost so far: flow + energy</span><b>'+fl.toFixed(3)+' + '+en.toFixed(3)+' = '+(fl+en).toFixed(3)+'</b></div>'+(done?'<div class="kv"><span>status</span><b>finished at '+T.mk.toFixed(2)+' h (final flow '+T.flow.toFixed(3)+' + energy '+T.en.toFixed(3)+')</b></div>':"")}
+function draw(){PL.forEach(p=>$("c_"+p).innerHTML=card(p));$("t").value=t;$("tl").textContent="t = "+(t*DATA.tr[seed].ppo.dt/3600).toFixed(2)+" h (tick "+t+" of "+maxT()+")";
+ const T=DATA.tr[seed];$("seedinfo").textContent="final costs: "+PL.map(p=>NAMES[p]+" "+T[p].tot.toFixed(3)).join(" · ")+(DATA.meta.mz_iter?"  (MuZero checkpoint it "+DATA.meta.mz_iter+", one search realisation)":"");
+ const dec=T[drv].dec,r=dec[di];$("di").textContent="decision "+(di+1)+" of "+dec.length+" · tick "+r[0]+" · "+NAMES[drv]+" chose: "+aname(r[1])+" · rule's remaining cost from here "+r[5].toFixed(2)+" h";
+ const svg=$("bars"),W=900,H=190,x0=30,bw=(W-x0)/14;let s='<line x1="'+x0+'" y1="150" x2="'+W+'" y2="150" stroke="'+css("--grid")+'"/>';
+ for(let a=0;a<14;a++){const legal=(r[2]>>a)&1,gx=x0+a*bw;const pp=r[3]?r[3][a]:0,mm=r[4]?r[4][a]:0,op=legal?1:.25;
+  [[pp,"--ppo",0],[mm,"--mz",1]].forEach(([v,c,k])=>{const h=v*1.3;s+='<rect x="'+(gx+4+k*(bw/2-4))+'" y="'+(150-h)+'" width="'+(bw/2-5)+'" height="'+h+'" rx="2" fill="'+css(c)+'" opacity="'+op+'"/>';if(v>=5)s+='<text x="'+(gx+4+k*(bw/2-4)+(bw/2-5)/2)+'" y="'+(146-h)+'" text-anchor="middle">'+v+'</text>'});
+  if(a===r[1])s+='<rect x="'+(gx+1)+'" y="8" width="'+(bw-2)+'" height="146" rx="4" fill="none" stroke="'+css("--ink")+'" stroke-width="1.5"/>';
+  s+='<text x="'+(gx+bw/2)+'" y="166" text-anchor="middle" opacity="'+(legal?1:.4)+'">'+alabel(a)+'</text>'}
+ svg.innerHTML=s}
+init();
+</script></body></html>

@@ -1,0 +1,10 @@
+# versions used for the thesis results (Python 3.11)
+numpy==1.26.4
+pandas>=2.2
+gymnasium==0.28.0
+stable-baselines3==2.9.0
+sb3-contrib==2.9.0
+matplotlib>=3.8
+scipy>=1.11            # 15_potenziale_onesto.py
+scikit-learn>=1.4      # 15_potenziale_onesto.py
+tensorboard>=2.15      # 11b_curve_addestramento_v2.py (reads the training event files)

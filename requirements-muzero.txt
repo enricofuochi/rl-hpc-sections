@@ -1,0 +1,6 @@
+# only needed to run / train MuZero (FT*/lib players "mz", train_muzero*.sh, 09/10/10b)
+-r requirements.txt
+torch
+DI-engine==0.5.3
+LightZero==0.2.0
+easydict

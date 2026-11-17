@@ -1,0 +1,14 @@
+__pycache__/
+*.pyc
+.DS_Store
+.venv/
+# generated results and runs
+FT0/output/
+FT1/output/
+FT1/runs/
+data_mz/
+*.pkl
+*.log
+# checkpoints (large binaries: publish as a release asset or add deliberately)
+FT0/modelli/
+FT1/modelli/
